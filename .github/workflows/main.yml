@@ -62,6 +62,13 @@ jobs:
           open(p, 'w').write(s)
           PY
 
+      - name: Make alarms wake the phone
+        run: |
+          D=node_modules/@capacitor/local-notifications/android/src/main/java/com/capacitorjs/plugins/localnotifications
+          sed -i 's/AlarmManager\.RTC,/AlarmManager.RTC_WAKEUP,/g' $D/LocalNotificationManager.java $D/TimedNotificationPublisher.java
+          if grep -n "AlarmManager\.RTC," $D/*.java; then echo "Patch failed"; exit 1; fi
+          grep -c "RTC_WAKEUP" $D/LocalNotificationManager.java $D/TimedNotificationPublisher.java
+
       - name: Build debug APK
         run: |
           npx cap sync android
