@@ -1,0 +1,76 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Create Capacitor project
+        run: |
+          npm init -y
+          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor/local-notifications@6
+          mkdir -p www
+          cp index.html www/index.html
+          echo '{"appId":"com.example.alarm","appName":"Alarm","webDir":"www","android":{"backgroundColor":"#16202e"}}' > capacitor.config.json
+          npx cap add android
+
+      - name: Add alarm sound and permissions
+        run: |
+          python3 - <<'PY'
+          import wave, struct, math, os
+          sr = 22050
+          def tone(f, d, v=0.6):
+              n = int(sr * d)
+              out = []
+              for i in range(n):
+                  env = min(1, i / (sr * 0.01)) * min(1, (n - i) / (sr * 0.03))
+                  s = math.sin(2 * math.pi * f * i / sr) + 0.35 * math.sin(4 * math.pi * f * i / sr)
+                  out.append(int(32767 * v * env * s / 1.35))
+              return out
+          def gap(d):
+              return [0] * int(sr * d)
+          burst = []
+          for _ in range(4):
+              burst += tone(988, 0.12) + gap(0.08) + tone(988, 0.12) + gap(0.08) + tone(988, 0.12) + gap(0.5)
+          burst += gap(0.6)
+          data = burst * 6
+          os.makedirs('android/app/src/main/res/raw', exist_ok=True)
+          with wave.open('android/app/src/main/res/raw/alarm.wav', 'wb') as w:
+              w.setnchannels(1)
+              w.setsampwidth(2)
+              w.setframerate(sr)
+              w.writeframes(b''.join(struct.pack('<h', x) for x in data))
+          p = 'android/app/src/main/AndroidManifest.xml'
+          s = open(p).read()
+          extra = ''.join('    <uses-permission android:name="android.permission.%s" />\n' % n for n in ['VIBRATE', 'SCHEDULE_EXACT_ALARM', 'USE_EXACT_ALARM'])
+          s = s.replace('</manifest>', extra + '</manifest>')
+          open(p, 'w').write(s)
+          PY
+
+      - name: Build debug APK
+        run: |
+          npx cap sync android
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: alarm-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
