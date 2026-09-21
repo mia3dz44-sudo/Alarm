@@ -57,7 +57,7 @@ jobs:
               w.writeframes(b''.join(struct.pack('<h', x) for x in data))
           p = 'android/app/src/main/AndroidManifest.xml'
           s = open(p).read()
-          extra = ''.join('    <uses-permission android:name="android.permission.%s" />\n' % n for n in ['VIBRATE', 'SCHEDULE_EXACT_ALARM', 'USE_EXACT_ALARM'])
+          extra = ''.join('    <uses-permission android:name="android.permission.%s" />\n' % n for n in ['VIBRATE', 'SCHEDULE_EXACT_ALARM', 'USE_EXACT_ALARM', 'USE_FULL_SCREEN_INTENT'])
           s = s.replace('</manifest>', extra + '</manifest>')
           open(p, 'w').write(s)
           PY
@@ -68,6 +68,36 @@ jobs:
           sed -i 's/AlarmManager\.RTC,/AlarmManager.RTC_WAKEUP,/g' $D/LocalNotificationManager.java $D/TimedNotificationPublisher.java
           if grep -n "AlarmManager\.RTC," $D/*.java; then echo "Patch failed"; exit 1; fi
           grep -c "RTC_WAKEUP" $D/LocalNotificationManager.java $D/TimedNotificationPublisher.java
+
+      - name: Make alarms turn the screen on
+        run: |
+          D=node_modules/@capacitor/local-notifications/android/src/main/java/com/capacitorjs/plugins/localnotifications
+          sed -i 's/mBuilder\.setContentIntent(pendingIntent);/mBuilder.setContentIntent(pendingIntent); mBuilder.setFullScreenIntent(pendingIntent, true); mBuilder.setCategory(NotificationCompat.CATEGORY_ALARM);/' $D/LocalNotificationManager.java
+          grep -c "setFullScreenIntent" $D/LocalNotificationManager.java | grep -qx 1 || { echo "Patch failed"; exit 1; }
+          cat > android/app/src/main/java/com/example/alarm/MainActivity.java <<'JAVA'
+          package com.example.alarm;
+
+          import android.os.Build;
+          import android.os.Bundle;
+          import android.view.WindowManager;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {
+              @Override
+              public void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  if (Build.VERSION.SDK_INT >= 27) {
+                      setShowWhenLocked(true);
+                      setTurnScreenOn(true);
+                  }
+                  getWindow().addFlags(
+                      WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+                      | WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                      | WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+                  );
+              }
+          }
+          JAVA
 
       - name: Build debug APK
         run: |
