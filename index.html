@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Alarm</title>
+<style>
+  :root {
+    --page: #e9edf1; --panel: #ffffff; --ink: #16202e; --muted: #5f6b7a; --line: #d3dae2;
+    --face: #16202e; --face-ink: #ffb730; --face-dim: #9aa6b5;
+    --accent: #1f5eff; --accent-ink: #ffffff; --danger: #c73a3a; --off: #b8c1cc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #0e141c; --panel: #172030; --ink: #e8edf3; --muted: #93a0b0; --line: #2a3648;
+      --face: #0a0f16; --face-ink: #ffb730; --face-dim: #6e7b8c;
+      --accent: #5b8aff; --accent-ink: #0e141c; --danger: #ff7272; --off: #3a4658;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; }
+  body {
+    background: var(--page); color: var(--ink);
+    font-family: Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 15px; line-height: 1.4;
+    display: flex; justify-content: center; padding: 16px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mono { font-family: "Roboto Mono", "Droid Sans Mono", "Courier New", monospace; }
+  .app { width: 100%; max-width: 360px; }
+  .app > * + * { margin-top: 12px; }
+
+  .clock { background: var(--face); border-radius: 18px; padding: 18px 20px 16px; }
+  .clock .time { font-size: 50px; line-height: 1; color: var(--face-ink); letter-spacing: -1px; }
+  .clock .time small { font-size: 22px; color: var(--face-dim); margin-left: 4px; }
+  .clock .date { color: var(--face-dim); font-size: 14px; margin-top: 4px; }
+  .clock .next { color: #e8edf3; font-size: 13px; margin-top: 8px; }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+  h2 { font-size: 15px; font-weight: 700; margin: 0 0 10px; }
+
+  .row { display: flex; align-items: center; }
+  .row > * + * { margin-left: 8px; }
+  .field { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+  .field > * + * { margin-top: 4px; }
+  label, .lbl { font-size: 12px; color: var(--muted); }
+  input[type="time"], input[type="text"], select {
+    font: inherit; color: var(--ink); background: var(--page);
+    border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; width: 100%; min-width: 0;
+  }
+  input[type="time"] { font-size: 18px; }
+  input:focus, select:focus, button:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--page); border-radius: 10px; padding: 3px; grid-gap: 3px; }
+  .seg button { font: inherit; border: 0; background: transparent; color: var(--muted); padding: 8px; border-radius: 8px; font-weight: 500; }
+  .seg button[aria-pressed="true"] { background: var(--panel); color: var(--ink); box-shadow: 0 0 0 1px var(--line); }
+
+  .days { display: grid; grid-template-columns: repeat(7, 1fr); grid-gap: 4px; }
+  .chip { position: relative; display: block; }
+  .chip input { position: absolute; opacity: 0; top: 0; left: 0; width: 100%; height: 100%; margin: 0; }
+  .chip span {
+    display: block; text-align: center; padding: 9px 0; border-radius: 9px; font-size: 13px; font-weight: 500;
+    background: var(--page); color: var(--muted); border: 1px solid var(--line); pointer-events: none;
+  }
+  .chip input:checked + span { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+  .stack > * + * { margin-top: 10px; }
+  .primary { display: block; width: 100%; font: inherit; font-weight: 700; border: 0; border-radius: 10px; padding: 11px; background: var(--accent); color: var(--accent-ink); }
+  .error { color: var(--danger); font-size: 13px; }
+  .linkbtn { font: inherit; font-size: 13px; color: var(--accent); background: none; border: 0; padding: 4px 0; margin-top: 8px; }
+
+  .alarm { display: flex; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+  .alarm > * + * { margin-left: 10px; }
+  .alarm:first-child { border-top: 0; padding-top: 0; }
+  .alarm:last-child { padding-bottom: 0; }
+  .alarm .info { flex: 1; min-width: 0; }
+  .alarm .t { font-size: 24px; line-height: 1.1; }
+  .alarm .d { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .alarm.off .t, .alarm.off .d { opacity: .45; }
+  .empty { color: var(--muted); font-size: 14px; margin: 0; }
+
+  .switch { position: relative; width: 42px; height: 24px; flex: none; display: block; }
+  .switch input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; margin: 0; z-index: 1; }
+  .switch span { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: var(--off); border-radius: 12px; }
+  .switch span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; }
+  .switch input:checked + span { background: var(--accent); }
+  .switch input:checked + span::after { left: 21px; }
+
+  .del { font: inherit; border: 0; background: transparent; color: var(--muted); padding: 8px 4px; }
+
+  .ring { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(10, 15, 22, .94); display: none; align-items: center; justify-content: center; padding: 24px; z-index: 10; }
+  .ring.show { display: flex; }
+  .ring .box { background: var(--face); border-radius: 20px; padding: 28px 24px; text-align: center; width: 100%; max-width: 320px; }
+  .ring .big { font-size: 60px; color: var(--face-ink); line-height: 1; animation: pulse 1s linear infinite; }
+  .ring .what { color: #e8edf3; margin: 10px 0 20px; }
+  .ring .btns { display: grid; grid-template-columns: 1fr 1fr; grid-gap: 8px; }
+  .ring button { font: inherit; font-weight: 700; border-radius: 10px; padding: 13px; border: 0; }
+  .ring .snooze { background: #2a3648; color: #e8edf3; }
+  .ring .stop { background: var(--face-ink); color: #16202e; }
+  @keyframes pulse { 0%, 49% { opacity: 1; } 50%, 100% { opacity: .35; } }
+  @media (prefers-reduced-motion: reduce) { .ring .big { animation: none; } }
+</style>
+</head>
+<body>
+<main class="app">
+  <section class="clock">
+    <div class="time mono" id="now">--:--<small id="sec">--</small></div>
+    <div class="date" id="today"></div>
+    <div class="next" id="next"></div>
+  </section>
+
+  <section class="card">
+    <h2>New alarm</h2>
+    <div class="stack">
+      <div class="row">
+        <div class="field" style="flex:0 0 130px">
+          <label for="time">Time</label>
+          <input type="time" id="time" class="mono" value="07:00">
+        </div>
+        <div class="field">
+          <label for="label">Label (optional)</label>
+          <input type="text" id="label" maxlength="30" placeholder="Wake up">
+        </div>
+      </div>
+
+      <div class="seg" role="group" aria-label="Repeat by">
+        <button type="button" id="modeWeek" aria-pressed="true">Weekdays</button>
+        <button type="button" id="modeDate" aria-pressed="false">Date</button>
+      </div>
+
+      <div id="weekBox"><div class="days" id="days"></div></div>
+
+      <div id="dateBox" class="row" hidden>
+        <div class="field">
+          <label for="day">Day</label>
+          <select id="day"></select>
+        </div>
+        <div class="field">
+          <label for="month">Month</label>
+          <select id="month"></select>
+        </div>
+      </div>
+      <div class="lbl" id="dateHint" hidden>Rings on this date every year.</div>
+
+      <div class="error" id="err" role="alert"></div>
+      <button class="primary" id="add" type="button">Add alarm</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Alarms</h2>
+    <div id="list"></div>
+    <button class="linkbtn" id="test" type="button">Test alarm in 10 seconds</button>
+  </section>
+</main>
+
+<div class="ring" id="ring" role="alertdialog" aria-modal="true" aria-labelledby="ringTime">
+  <div class="box">
+    <div class="big mono" id="ringTime">00:00</div>
+    <div class="what" id="ringWhat">Alarm</div>
+    <div class="btns">
+      <button class="snooze" id="snooze" type="button">Snooze 5 min</button>
+      <button class="stop" id="stop" type="button">Stop</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];               // Mon..Sun (JS getDay values)
+  var DAY_SHORT = { 0: "Sun", 1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat" };
+  var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var KEY = "alarm-app-v2";
+  var SNOOZE_BASE = 1000000000;
+  var SNOOZE_MS = 5 * 60 * 1000;
+
+  var Native = !!(window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform());
+  var LN = Native && Capacitor.Plugins ? Capacitor.Plugins.LocalNotifications : null;
+
+  var alarms = [];
+  var mode = "week";
+  var fired = {};
+  var snoozed = [];
+  var ringing = null;
+  var beepTimer = null;
+  var audioCtx = null;
+
+  function $(id) { return document.getElementById(id); }
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+
+  function load() {
+    try {
+      var raw = localStorage.getItem(KEY);
+      if (raw) { var a = JSON.parse(raw); if (Array.isArray(a)) alarms = a; }
+    } catch (e) { alarms = []; }
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(alarms)); } catch (e) {} }
+  function nextNid() {
+    var m = 0;
+    alarms.forEach(function (a) { if (a.nid > m) m = a.nid; });
+    return m + 1;
+  }
+
+  // ---------- Form ----------
+  DAY_ORDER.forEach(function (d) {
+    var l = document.createElement("label");
+    l.className = "chip";
+    var cb = document.createElement("input");
+    cb.type = "checkbox"; cb.value = d; cb.checked = d >= 1 && d <= 5;
+    cb.setAttribute("aria-label", DAY_SHORT[d]);
+    var s = document.createElement("span"); s.textContent = DAY_SHORT[d].slice(0, 2);
+    l.appendChild(cb); l.appendChild(s);
+    $("days").appendChild(l);
+  });
+  for (var i = 1; i <= 31; i++) { var o = document.createElement("option"); o.value = i; o.textContent = i; $("day").appendChild(o); }
+  MONTHS.forEach(function (m, idx) { var o = document.createElement("option"); o.value = idx + 1; o.textContent = m; $("month").appendChild(o); });
+  var t0 = new Date(); $("day").value = t0.getDate(); $("month").value = t0.getMonth() + 1;
+
+  function setMode(m) {
+    mode = m;
+    $("modeWeek").setAttribute("aria-pressed", m === "week");
+    $("modeDate").setAttribute("aria-pressed", m === "date");
+    $("weekBox").hidden = m !== "week";
+    $("dateBox").hidden = m !== "date";
+    $("dateHint").hidden = m !== "date";
+    $("err").textContent = "";
+  }
+  $("modeWeek").onclick = function () { setMode("week"); };
+  $("modeDate").onclick = function () { setMode("date"); };
+
+  function describe(a) {
+    if (a.mode === "date") return a.day + " " + MONTHS[a.month - 1] + " \u00b7 every year";
+    var days = a.days;
+    if (days.length === 7) return "Every day";
+    function same(x, y) { return x.length === y.length && x.every(function (v) { return y.indexOf(v) > -1; }); }
+    if (same(days, [1,2,3,4,5])) return "Weekdays";
+    if (same(days, [6,0])) return "Weekends";
+    return DAY_ORDER.filter(function (d) { return days.indexOf(d) > -1; }).map(function (d) { return DAY_SHORT[d]; }).join(" ");
+  }
+  function matchesDay(a, date) {
+    if (a.mode === "date") return date.getDate() === a.day && date.getMonth() + 1 === a.month;
+    return a.days.indexOf(date.getDay()) > -1;
+  }
+  function nextTrigger(a, from) {
+    for (var i = 0; i < 400; i++) {
+      var d = new Date(from.getFullYear(), from.getMonth(), from.getDate() + i);
+      if (!matchesDay(a, d)) continue;
+      var p = a.time.split(":");
+      d.setHours(+p[0], +p[1], 0, 0);
+      if (d > from) return d;
+    }
+    return null;
+  }
+
+  // ---------- Native scheduling (Android) ----------
+  function buildNotifications(a) {
+    var p = a.time.split(":"), h = +p[0], m = +p[1];
+    var items = [];
+    function make(id, schedule) {
+      return {
+        id: id, title: a.label || "Alarm", body: a.time,
+        channelId: "alarm", sound: "alarm.wav", autoCancel: true,
+        extra: { alarmId: a.id }, schedule: schedule
+      };
+    }
+    if (a.mode === "week") {
+      a.days.forEach(function (d) {
+        items.push(make(a.nid * 100 + d, { on: { weekday: d + 1, hour: h, minute: m, second: 0 }, allowWhileIdle: true }));
+      });
+    } else {
+      var now = new Date(), found = 0;
+      for (var y = now.getFullYear(); y < now.getFullYear() + 12 && found < 5; y++) {
+        var d2 = new Date(y, a.month - 1, a.day, h, m, 0, 0);
+        if (d2.getMonth() !== a.month - 1) continue;           // e.g. 29 Feb in a non-leap year
+        if (d2.getTime() <= now.getTime()) continue;
+        items.push(make(a.nid * 100 + 10 + found, { at: d2, allowWhileIdle: true }));
+        found++;
+      }
+    }
+    return items;
+  }
+
+  function scheduleAll() {
+    if (!LN) return Promise.resolve();
+    return LN.getPending().then(function (res) {
+      var mine = ((res && res.notifications) || []).filter(function (n) { return n.id < SNOOZE_BASE; });
+      return mine.length ? LN.cancel({ notifications: mine.map(function (n) { return { id: n.id }; }) }) : null;
+    }).then(function () {
+      var items = [];
+      alarms.forEach(function (a) { if (a.on) items = items.concat(buildNotifications(a)); });
+      return items.length ? LN.schedule({ notifications: items }) : null;
+    }).catch(function (e) {
+      $("err").textContent = "Could not schedule alarms: " + (e && e.message ? e.message : e);
+    });
+  }
+
+  function setupNative() {
+    if (!LN) return;
+    LN.createChannel({
+      id: "alarm", name: "Alarms", description: "Alarm ringing",
+      importance: 5, visibility: 1, sound: "alarm.wav", vibration: true
+    }).catch(function () {});
+    LN.requestPermissions().catch(function () {});
+    LN.addListener("localNotificationReceived", function (n) { onNativeRing(n && n.extra); });
+    LN.addListener("localNotificationActionPerformed", function (r) { onNativeRing(r && r.notification && r.notification.extra); });
+    scheduleAll();
+  }
+  function onNativeRing(extra) {
+    var a = null;
+    if (extra && extra.alarmId) alarms.forEach(function (x) { if (x.id === extra.alarmId) a = x; });
+    var n = new Date();
+    startRing(a || { time: pad(n.getHours()) + ":" + pad(n.getMinutes()), label: "Alarm" }, true);
+  }
+
+  // ---------- List ----------
+  function render() {
+    var list = $("list");
+    list.innerHTML = "";
+    if (!alarms.length) {
+      var p = document.createElement("p"); p.className = "empty";
+      p.textContent = "No alarms yet. Set a time above and press Add alarm.";
+      list.appendChild(p);
+    }
+    var sorted = alarms.slice().sort(function (a, b) { return a.time < b.time ? -1 : a.time > b.time ? 1 : 0; });
+    sorted.forEach(function (a) {
+      var row = document.createElement("div");
+      row.className = "alarm" + (a.on ? "" : " off");
+
+      var info = document.createElement("div"); info.className = "info";
+      var t = document.createElement("div"); t.className = "t mono"; t.textContent = a.time;
+      var d = document.createElement("div"); d.className = "d";
+      d.textContent = (a.label ? a.label + " \u00b7 " : "") + describe(a);
+      info.appendChild(t); info.appendChild(d);
+
+      var sw = document.createElement("label"); sw.className = "switch";
+      var cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = a.on;
+      cb.setAttribute("aria-label", "Alarm " + a.time + " on or off");
+      cb.onchange = function () { a.on = cb.checked; save(); render(); updateNext(); scheduleAll(); };
+      var sp = document.createElement("span");
+      sw.appendChild(cb); sw.appendChild(sp);
+
+      var del = document.createElement("button"); del.className = "del"; del.type = "button";
+      del.textContent = "Delete"; del.setAttribute("aria-label", "Delete alarm " + a.time);
+      del.onclick = function () {
+        alarms = alarms.filter(function (x) { return x.id !== a.id; });
+        save(); render(); updateNext(); scheduleAll();
+      };
+
+      row.appendChild(info); row.appendChild(sw); row.appendChild(del);
+      list.appendChild(row);
+    });
+  }
+
+  $("add").onclick = function () {
+    unlockAudio();
+    var time = $("time").value;
+    if (!time) { $("err").textContent = "Pick a time for the alarm."; return; }
+    var a = { id: Date.now() + "" + Math.floor(Math.random() * 1000), nid: nextNid(), time: time, label: $("label").value.trim(), on: true, mode: mode };
+    if (mode === "week") {
+      a.days = Array.prototype.slice.call($("days").querySelectorAll("input:checked")).map(function (c) { return +c.value; });
+      if (!a.days.length) { $("err").textContent = "Select at least one weekday."; return; }
+    } else {
+      a.day = +$("day").value; a.month = +$("month").value;
+      var maxDays = [31,29,31,30,31,30,31,31,30,31,30,31][a.month - 1];
+      if (a.day > maxDays) { $("err").textContent = MONTHS[a.month - 1] + " has only " + maxDays + " days."; return; }
+    }
+    $("err").textContent = "";
+    alarms.push(a);
+    $("label").value = "";
+    save(); render(); updateNext(); scheduleAll();
+  };
+
+  // ---------- Sound (browser fallback only) ----------
+  function unlockAudio() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+    } catch (e) {}
+  }
+  document.addEventListener("touchstart", unlockAudio, { passive: true });
+  document.addEventListener("click", unlockAudio);
+
+  function beep() {
+    if (!audioCtx) return;
+    var now = audioCtx.currentTime;
+    [0, 0.18, 0.36].forEach(function (off) {
+      var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = "square"; o.frequency.value = 880;
+      g.gain.setValueAtTime(0.0001, now + off);
+      g.gain.exponentialRampToValueAtTime(0.15, now + off + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + off + 0.13);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(now + off); o.stop(now + off + 0.15);
+    });
+  }
+
+  // ---------- Ringing overlay ----------
+  function startRing(a, nativeSound) {
+    if (ringing) return;
+    ringing = a;
+    $("ringTime").textContent = a.time;
+    $("ringWhat").textContent = a.label || "Alarm";
+    $("ring").classList.add("show");
+    document.title = "\u23f0 " + a.time;
+    if (!nativeSound) {
+      beep();
+      beepTimer = setInterval(beep, 1200);
+      if (navigator.vibrate) { try { navigator.vibrate([300, 150, 300]); } catch (e) {} }
+    }
+  }
+  function stopRing() {
+    clearInterval(beepTimer); beepTimer = null;
+    $("ring").classList.remove("show");
+    document.title = "Alarm";
+    ringing = null;
+    if (LN) { LN.removeAllDeliveredNotifications().catch(function () {}); }
+  }
+  $("stop").onclick = stopRing;
+  $("snooze").onclick = function () {
+    var a = ringing;
+    stopRing();
+    if (!a) return;
+    if (LN) {
+      LN.schedule({ notifications: [{
+        id: SNOOZE_BASE + (Date.now() % 100000000),
+        title: a.label || "Alarm", body: a.time + " (snoozed)",
+        channelId: "alarm", sound: "alarm.wav", autoCancel: true,
+        extra: { alarmId: a.id },
+        schedule: { at: new Date(Date.now() + SNOOZE_MS), allowWhileIdle: true }
+      }] }).catch(function () {});
+    } else {
+      snoozed.push({ alarm: a, at: Date.now() + SNOOZE_MS });
+    }
+  };
+
+  $("test").onclick = function () {
+    unlockAudio();
+    var when = new Date(Date.now() + 10000);
+    var test = { id: "test", time: pad(when.getHours()) + ":" + pad(when.getMinutes()), label: "Test alarm" };
+    if (LN) {
+      LN.schedule({ notifications: [{
+        id: SNOOZE_BASE + 99999999, title: "Test alarm", body: test.time,
+        channelId: "alarm", sound: "alarm.wav", autoCancel: true,
+        extra: { alarmId: "test" }, schedule: { at: when, allowWhileIdle: true }
+      }] }).catch(function (e) { $("err").textContent = "Test failed: " + (e && e.message ? e.message : e); });
+    } else {
+      setTimeout(function () { startRing(test, false); }, 10000);
+    }
+  };
+
+  // ---------- Clock ----------
+  function tick() {
+    var n = new Date();
+    $("now").firstChild.nodeValue = pad(n.getHours()) + ":" + pad(n.getMinutes());
+    $("sec").textContent = pad(n.getSeconds());
+    $("today").textContent = n.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+
+    if (!Native) {                                  // browser fallback: ring from the page itself
+      var hhmm = pad(n.getHours()) + ":" + pad(n.getMinutes());
+      var dayKey = n.getFullYear() + "-" + n.getMonth() + "-" + n.getDate();
+      alarms.forEach(function (a) {
+        if (!a.on || a.time !== hhmm || !matchesDay(a, n)) return;
+        var k = a.id + "|" + dayKey + "|" + hhmm;
+        if (fired[k]) return;
+        fired[k] = true;
+        startRing(a, false);
+      });
+      snoozed = snoozed.filter(function (s) {
+        if (Date.now() >= s.at && !ringing) { startRing(s.alarm, false); return false; }
+        return true;
+      });
+    }
+    if (n.getSeconds() === 0) updateNext();
+  }
+
+  function updateNext() {
+    var n = new Date(), best = null;
+    alarms.forEach(function (a) {
+      if (!a.on) return;
+      var t = nextTrigger(a, n);
+      if (t && (!best || t < best)) best = t;
+    });
+    if (!best) { $("next").textContent = "No alarm set"; return; }
+    var mins = Math.round((best - n) / 60000);
+    var h = Math.floor(mins / 60), m = mins % 60;
+    $("next").textContent = "Next alarm in " + (h >= 48 ? Math.floor(h / 24) + " days" : (h ? h + " h " : "") + m + " min");
+  }
+
+  load(); render(); tick(); updateNext();
+  setInterval(tick, 1000);
+  setupNative();
+})();
+</script>
+</body>
+</html>
