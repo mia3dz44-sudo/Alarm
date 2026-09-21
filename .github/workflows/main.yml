@@ -69,6 +69,33 @@ jobs:
           if grep -n "AlarmManager\.RTC," $D/*.java; then echo "Patch failed"; exit 1; fi
           grep -c "RTC_WAKEUP" $D/LocalNotificationManager.java $D/TimedNotificationPublisher.java
 
+      - name: Use system alarm-clock alarms
+        run: |
+          python3 - <<'PY'
+          D = 'node_modules/@capacitor/local-notifications/android/src/main/java/com/capacitorjs/plugins/localnotifications/'
+          SHOW = (
+              'Intent showIntent = %(c)s.getPackageManager().getLaunchIntentForPackage(%(c)s.getPackageName());\n'
+              'if (showIntent == null) { showIntent = new Intent(); }\n'
+              'int showFlags = PendingIntent.FLAG_UPDATE_CURRENT;\n'
+              'if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) { showFlags |= PendingIntent.FLAG_IMMUTABLE; }\n'
+              'PendingIntent showPi = PendingIntent.getActivity(%(c)s, 0, showIntent, showFlags);\n'
+              'alarmManager.setAlarmClock(new AlarmManager.AlarmClockInfo(trigger, showPi), pendingIntent);\n'
+          )
+          f = D + 'LocalNotificationManager.java'
+          s = open(f).read()
+          a = '    ) {\n        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {\n            Logger.warn('
+          assert s.count(a) == 1
+          s = s.replace(a, '    ) {\n        if (true) {\n' + SHOW % {'c': 'context'} + 'return;\n        }\n        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {\n            Logger.warn(')
+          open(f, 'w').write(s)
+          f = D + 'TimedNotificationPublisher.java'
+          s = open(f).read()
+          b = 'alarmManager.setExact(AlarmManager.RTC_WAKEUP, trigger, pendingIntent);'
+          assert s.count(b) == 1
+          s = s.replace(b, SHOW % {'c': 'context'})
+          open(f, 'w').write(s)
+          print('alarm-clock patch applied')
+          PY
+
       - name: Make alarms turn the screen on
         run: |
           D=node_modules/@capacitor/local-notifications/android/src/main/java/com/capacitorjs/plugins/localnotifications
